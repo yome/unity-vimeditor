@@ -135,6 +135,12 @@ namespace Vim.Editor
             return EditorPrefs.GetBool(k_force_foreground_key, false);
         }
 
+        const string k_open_tab_key = "vimcode_open_tab";
+        static bool ShouldOpenTab()
+        {
+            return EditorPrefs.GetBool(k_open_tab_key, false);
+        }
+
         const string k_gen_vs_sln_key = "vimcode_gen_vs_sln";
         static bool ShouldGenerateVisualStudioSln()
         {
@@ -230,6 +236,16 @@ namespace Vim.Editor
                 if (new_should_force_fg != prev_should_force_fg)
                 {
                     EditorPrefs.SetBool(k_force_foreground_key, new_should_force_fg);
+                }
+
+                var prev_should_open_tab = ShouldOpenTab();
+                var new_should_open_tab = EditorGUILayout.Toggle(new GUIContent(
+                            "Open each file in a new tabpage",
+                            "Tell vim to open each files in their own tab."),
+                        prev_should_open_tab);
+                if (new_should_open_tab != prev_should_open_tab)
+                {
+                    EditorPrefs.SetBool(k_open_tab_key, new_should_open_tab);
                 }
 
                 var prev_servername = GetServerName();
@@ -382,7 +398,9 @@ namespace Vim.Editor
                     break;
             }
 
-            start_info.Arguments = $"--servername {GetServerName()} --remote-silent +\"call cursor({line},{column})\" {GetExtraCommands()} {path} \"{file}\"";
+            var remoteOpenOption = ShouldOpenTab() ? "--remote-tab-silent" : "--remote-silent";
+
+            start_info.Arguments = $"--servername {GetServerName()} {remoteOpenOption} +\"call cursor({line},{column})\" {GetExtraCommands()} {path} \"{file}\"";
 
             //~ Debug.Log($"[VimExternalEditor] Launching {start_info.FileName} {start_info.Arguments}");
 
