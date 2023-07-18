@@ -93,7 +93,8 @@ namespace Vim.Editor
                 return k_executable_names
                     .Select(exe => Path.Combine(folder, exe))
                     .Where(path => File.Exists(path))
-                    .Select(path => new CodeEditor.Installation{
+                    .Select(path => new CodeEditor.Installation
+                    {
                         Name = $"Vim ({Path.GetFileName(path)})",
                         Path = path,
                     });
@@ -104,7 +105,8 @@ namespace Vim.Editor
         CodeEditor.Installation[] m_Installations;
         public CodeEditor.Installation[] Installations
         {
-            get {
+            get
+            {
                 return m_Installations;
             }
         }
@@ -191,7 +193,7 @@ namespace Vim.Editor
             var style = new GUIStyle
             {
                 richText = true,
-                         margin = new RectOffset(0, 4, 0, 0)
+                margin = new RectOffset(0, 4, 0, 0)
             };
 
             using (new EditorGUI.IndentLevelScope())
@@ -340,6 +342,7 @@ namespace Vim.Editor
 
         /// When you change Assets in Unity, this method for the current chosen
         /// instance of IExternalCodeEditor parses the new and changed Assets.
+        /// Try to avoid regenerating the solution if no code asset was involved since it loses the users' selection in the Editor (even when simply changing a texture's import settings for example).
         public void SyncIfNeeded(string[] addedFiles, string[] deletedFiles, string[] movedFiles, string[] movedFromFiles, string[] importedFiles)
         {
             //~ Debug.Log($"[VimExternalEditor] SyncIfNeeded added={addedFiles.Length} deleted={deletedFiles.Length} moved={movedFiles.Length} movedFrom={movedFromFiles.Length} imported={importedFiles.Length}");
@@ -347,7 +350,36 @@ namespace Vim.Editor
             // compile. Visual Studio solutions don't care about file contents
             // -- just structure. Don't really care about deleted files since
             // they won't break visual studio so ignore them too.
-            if ((addedFiles.Length + movedFiles.Length) > 0 && ShouldGenerateVisualStudioSln())
+
+            if (!ShouldGenerateVisualStudioSln())
+            {
+                return;
+            }
+
+            var syncNeeded = false;
+
+            foreach (var f in addedFiles)
+            {
+                if (IsCodeAsset(f))
+                {
+                    syncNeeded = true;
+                    break;
+                }
+            }
+
+            if (!syncNeeded)
+            {
+                foreach (var f in movedFiles)
+                {
+                    if (IsCodeAsset(f))
+                    {
+                        syncNeeded = true;
+                        break;
+                    }
+                }
+            }
+
+            if (syncNeeded)
             {
                 RegenerateVisualStudioSolution();
                 Debug.Log($"[VimExternalEditor] Regenerated Visual Studio solution for {addedFiles.Length} new files, {movedFiles.Length} moved files.");
