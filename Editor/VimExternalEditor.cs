@@ -33,24 +33,17 @@ namespace Vim.Editor
 
         static CodeEditor.Installation[] BuildInstalls()
         {
-            var installs = new List<CodeEditor.Installation>(){
-                // Unity will automatically filter out paths that don't
-                // exist on disk. Use some standard paths and search in
-                // PATH.
-                new CodeEditor.Installation{
-                    Name = "MacVim",
-                    // Installed with brew
-                    Path = "/usr/local/bin/mvim",
-                },
-                new CodeEditor.Installation{
-                    Name = "Vim",
-                    // Linux
-                    Path = "/usr/share/vim/gvim",
-                },
-            };
+            // Search PATH plus some standard install folders. Unity may be
+            // launched with a minimal PATH (Dock, Spotlight, Hub relaunch
+            // after an update) that doesn't include the folder vim was
+            // installed in, so don't rely on PATH alone.
+            var path_folders = (Environment.GetEnvironmentVariable("PATH") ?? "")
+                .Split(Path.PathSeparator);
 
-            var all_installs = Environment.GetEnvironmentVariable("PATH")
-                .Split(Path.PathSeparator)
+            var all_installs = k_standard_folders
+                .Concat(path_folders)
+                .Where(p => !string.IsNullOrEmpty(p))
+                .Distinct()
                 // We could limit our search to folders named vim, but that won't
                 // catch scoop-installed vim and maybe others (chocolatey).
                 .SelectMany(p => GetVimExeInFolder(p))
@@ -64,6 +57,24 @@ namespace Vim.Editor
 
             return all_installs;
         }
+
+        static readonly string[] k_standard_folders =
+        {
+#if UNITY_EDITOR_WIN
+#elif UNITY_EDITOR_OSX
+            // Homebrew on Apple Silicon
+            "/opt/homebrew/bin",
+            // Homebrew on Intel
+            "/usr/local/bin",
+            // MacVim.app installed manually
+            "/Applications/MacVim.app/Contents/bin",
+#else
+            // Linux
+            "/usr/bin",
+            "/usr/local/bin",
+            "/usr/share/vim",
+#endif
+        };
 
 
         static readonly string[] k_executable_names =
@@ -394,11 +405,31 @@ namespace Vim.Editor
         public bool TryGetInstallationForPath(string editorPath, out CodeEditor.Installation installation)
         {
             //~ Debug.Log($"[VimExternalEditor] TryGetInstallationForPath {editorPath}");
-            // I don't understand why this function exists. I must return true
-            // to be able to control what the selected editor does, but it's
-            // just passing one of the paths I provided in Installations.
+            // Unity calls this with the path saved in the preferences to find
+            // out which code editor owns it. Prefer a discovered install, but
+            // also accept any existing vim executable: the discovered list
+            // depends on PATH, which varies with how Unity was launched, and
+            // we don't want a minimal PATH to silently hand the file over to
+            // Unity's default editor.
             installation = Installations.FirstOrDefault(install => install.Path == editorPath);
-            return !string.IsNullOrEmpty(installation.Name);
+            if (!string.IsNullOrEmpty(installation.Name))
+            {
+                return true;
+            }
+
+            if (!string.IsNullOrEmpty(editorPath)
+                && k_executable_names.Contains(Path.GetFileName(editorPath))
+                && File.Exists(editorPath))
+            {
+                installation = new CodeEditor.Installation
+                {
+                    Name = $"Vim ({Path.GetFileName(editorPath)})",
+                    Path = editorPath,
+                };
+                return true;
+            }
+
+            return false;
         }
 
         ProcessStartInfo BuildVim()
